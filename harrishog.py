@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.spatial import Delaunay
 import cv2
 from cyvlfeat import hog,kmeans
 
@@ -9,11 +10,12 @@ num_org = 5
 num_forg = 5
 hogmatrix = []
 hogmatrixcat = []
-points = []
+points_org = []
+points_forg = []
 patchsize = 10
 cellsize = 8
 ncells = 1
-k = 500 #k for k-means
+kvalue = 500 #k for k-means
 
 def calcHog(im,points,patchsize,ncells):
     imsz = im.shape
@@ -60,9 +62,9 @@ for i in range(1,num_org+1):
     #threshold for an optimal value, it may vary depending on the image.
     dmax = dst>0.01*dst.max()
     harrispoints = np.where(dmax == True)
-    points.append(harrispoints)
+    points_org.append(harrispoints)
     
-    [(hogvalues,valid_points)] = calcHog(gray,points,patchsize,ncells)
+    [(hogvalues,valid_points)] = calcHog(gray,points_org,patchsize,ncells)
     for m in range(hogvalues.shape[0]):
         hogvalues[m] /= sum(hogvalues[m])
     hogmatrix.append(hogvalues)
@@ -75,7 +77,7 @@ for i in range(1,num_org+1):
 #    cv2.destroyAllWindows()
     
 hogmatrixcat = np.concatenate((hogmatrix[:]),axis=0)
-kmeancenters = kmeans.kmeans(hogmatrixcat,k,initialization='PLUSPLUS')
+kmeancenters = kmeans.kmeans(hogmatrixcat,kvalue,initialization='PLUSPLUS')
 kmeanclusters = kmeans.kmeans_quantize(hogmatrixcat,kmeancenters)
 
 label_org = []
@@ -90,12 +92,8 @@ for i in range(len(hogmatrix)):
         count += 1
     label_org.append(label2)
 
-hist_org=np.zeros((len(label_org),k))
+hist_org=np.zeros((len(label_org),kvalue))
     
-#for i in range(len(label)):
-#    for j in range(k):
-#        hist[i][j] = label[i].count(j)
-        
 for i in range(len(label_org)):
     for j in range(len(label_org[i])):
         hist_org[i][label_org[i][j]] += 1
@@ -119,9 +117,9 @@ for i in range(1,num_forg+1):
     #threshold for an optimal value, it may vary depending on the image.
     dmax = dst>0.01*dst.max()
     harrispoints = np.where(dmax == True)
-    points.append(harrispoints)
+    points_forg.append(harrispoints)
     
-    [(hogvalues,valid_points)] = calcHog(gray,points,patchsize,ncells)
+    [(hogvalues,valid_points)] = calcHog(gray,points_forg,patchsize,ncells)
     for m in range(hogvalues.shape[0]):
         hogvalues[m] /= sum(hogvalues[m])
     hogmatrix.append(hogvalues)
@@ -134,7 +132,7 @@ for i in range(1,num_forg+1):
 #    cv2.destroyAllWindows()
     
 hogmatrixcat = np.concatenate((hogmatrix[:]),axis=0)
-kmeancenters = kmeans.kmeans(hogmatrixcat,k,initialization='PLUSPLUS')
+kmeancenters = kmeans.kmeans(hogmatrixcat,kvalue,initialization='PLUSPLUS')
 kmeanclusters = kmeans.kmeans_quantize(hogmatrixcat,kmeancenters)
 
 label_forg = []
@@ -149,12 +147,82 @@ for i in range(len(hogmatrix)):
         count += 1
     label_forg.append(label2)
 
-hist_forg=np.zeros((len(label_forg),k))
+hist_forg=np.zeros((len(label_forg),kvalue))
         
 for i in range(len(label_forg)):
     for j in range(len(label_forg[i])):
         hist_forg[i][label_forg[i][j]] += 1
     hist_forg[i] /= sum(hist_forg[i])
+    
+globaldesc_temp = []
+globaldesc = []
+count = 0
+for i in range(num_org):
+    globaldesc_org = []
+    globaldesc_forg = []
+    for j in range(num_org):
+        globaldesc_org.append((abs(hist_org[i]-hist_org[j]),1))
+    globaldesc_temp.append(globaldesc_org)
+    for k in range(num_forg):
+        globaldesc_forg.append((abs(hist_org[i]-hist_forg[k]),0))
+    globaldesc_temp.append(globaldesc_forg)
+for i in range(num_org):
+    globaldesc.append(globaldesc_temp[count]+globaldesc_temp[count+1])
+    count += 2
+    
+tri_org_temp = []
+tri_org = []
+tri_org_center = []
+hogmatrix_tri_org = []
+kmeancenters_tri_org = []
+kmeanclusters_tri_org = []
+for i in range(num_org):
+    temp = []
+    tri_org_center_temp_1 = []
+    tri_org_center_temp_2 = []
+    for j in range(len(points_org[i][0])):
+        temp.append((points_org[i][0][j],points_org[i][1][j]))
+    tri_org_temp = Delaunay(temp)
+    tri_org.append(tri_org_temp.points[tri_org_temp.simplices])
+    for k in range(tri_org_temp.simplices.shape[0]):
+        tri_org_center_temp_1.append((sum(tri_org[i][k])/3)[0])
+        tri_org_center_temp_2.append((sum(tri_org[i][k])/3)[1])
+    tri_org_center.append([np.array(tri_org_center_temp_1),np.array(tri_org_center_temp_2)])
+    [(hogvalues_tri_org,p)] = calcHog(gray,tri_org_center,patchsize,ncells)
+    for m in range(hogvalues_tri_org.shape[0]):
+        hogvalues_tri_org[m] /= sum(hogvalues_tri_org[m])
+    hogmatrix_tri_org.append(hogvalues_tri_org)
+    
+hogmatrixcat_tri_org = np.concatenate((hogmatrix_tri_org[:]),axis=0)
+kmeancenters_tri_org = kmeans.kmeans(hogmatrixcat_tri_org,kvalue,initialization='PLUSPLUS')
+kmeanclusters_tri_org = kmeans.kmeans_quantize(hogmatrixcat_tri_org,kmeancenters_tri_org)
+
+tri_forg_temp = []
+tri_forg = []
+tri_forg_center = []
+hogmatrix_tri_forg = []
+kmeancenters_tri_forg = []
+kmeanclusters_tri_forg = []
+for i in range(num_forg):
+    temp = []
+    tri_forg_center_temp_1 = []
+    tri_forg_center_temp_2 = []
+    for j in range(len(points_forg[i][0])):
+        temp.append((points_forg[i][0][j],points_forg[i][1][j]))
+    tri_forg_temp = Delaunay(temp)
+    tri_forg.append(tri_forg_temp.points[tri_forg_temp.simplices])
+    for k in range(tri_forg_temp.simplices.shape[0]):
+        tri_forg_center_temp_1.append((sum(tri_forg[i][k])/3)[0])
+        tri_forg_center_temp_2.append((sum(tri_forg[i][k])/3)[1])
+    tri_forg_center.append([np.array(tri_forg_center_temp_1),np.array(tri_forg_center_temp_2)])
+    [(hogvalues_tri_forg,p)] = calcHog(gray,tri_forg_center,patchsize,ncells)
+    for m in range(hogvalues_tri_forg.shape[0]):
+        hogvalues_tri_forg[m] /= sum(hogvalues_tri_forg[m])
+    hogmatrix_tri_forg.append(hogvalues_tri_forg)
+    
+hogmatrixcat_tri_forg = np.concatenate((hogmatrix_tri_forg[:]),axis=0)
+kmeancenters_tri_forg = kmeans.kmeans(hogmatrixcat_tri_forg,kvalue,initialization='PLUSPLUS')
+kmeanclusters_tri_forg = kmeans.kmeans_quantize(hogmatrixcat_tri_forg,kmeancenters_tri_forg)
     
 #globaldesc=[[(np.zeros(k),0)]*10]*5
 ##globaldesc = np.zeros((5,10))
