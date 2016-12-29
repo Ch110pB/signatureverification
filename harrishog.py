@@ -4,6 +4,7 @@ import cv2
 from cyvlfeat import hog,kmeans
 
 path = 'C:/Users/llop/Documents/Winter 16/Datasets/dataset/'
+#path = 'D:/IMPORTANT/signature_verification/Datasets/dataset/'
 path_org = 'org/'
 path_forg = 'forg/'
 num_org = 5
